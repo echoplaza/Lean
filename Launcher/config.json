@@ -29,7 +29,7 @@
   // engine
   "data-folder": "../../../Data/",
 
-  // debugging configuration
+  // debugging configuration - options for debugging-method LocalCmdLine, VisualStudio, PTVSD, PyCharm
   "debugging": false,
   "debugging-method": "LocalCmdline",
 
@@ -125,6 +125,9 @@
   // Required to access data from US Energy Information Administration
   // To get your access token go to https://www.eia.gov/opendata
   "us-energy-information-auth-token": "",
+
+  // Required for IEX history requests
+  "iex-cloud-api-key": "",
 
   // alpaca configuration
   // available trading mode: 'paper', 'live'
