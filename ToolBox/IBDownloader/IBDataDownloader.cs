@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -14,14 +14,16 @@
 */
 
 
-using NodaTime;
-using QuantConnect.Brokerages.InteractiveBrokers;
-using QuantConnect.Data;
-using QuantConnect.Data.Market;
-using QuantConnect.Securities;
 using System;
-using System.Collections.Generic;
 using System.Linq;
+using QuantConnect.Data;
+using QuantConnect.Util;
+using QuantConnect.Securities;
+using QuantConnect.Interfaces;
+using QuantConnect.Data.Market;
+using System.Collections.Generic;
+using QuantConnect.Configuration;
+using QuantConnect.Brokerages.InteractiveBrokers;
 
 namespace QuantConnect.ToolBox.IBDownloader
 {
@@ -37,7 +39,10 @@ namespace QuantConnect.ToolBox.IBDownloader
         /// </summary>
         public IBDataDownloader()
         {
-            _brokerage = new InteractiveBrokersBrokerage(null, null, null);
+            var mapFileProvider = Composer.Instance.GetExportedValueByTypeName<IMapFileProvider>(
+                Config.Get("map-file-provider", "LocalDiskMapFileProvider"));
+
+            _brokerage = new InteractiveBrokersBrokerage(null, null, null, null, mapFileProvider);
             _brokerage.Connect();
         }
 
@@ -53,39 +58,54 @@ namespace QuantConnect.ToolBox.IBDownloader
         public IEnumerable<BaseData> Get(Symbol symbol, Resolution resolution, DateTime startUtc, DateTime endUtc)
         {
             if (resolution == Resolution.Tick)
+            {
                 throw new NotSupportedException("Resolution not available: " + resolution);
+            }
 
             if (endUtc < startUtc)
+            {
                 throw new ArgumentException("The end date must be greater or equal than the start date.");
+            }
 
-            var historyRequest = new HistoryRequest(
-                startUtc,
-                endUtc,
-                typeof(QuoteBar),
-                symbol,
-                resolution,
-                SecurityExchangeHours.AlwaysOpen(TimeZones.EasternStandard),
-                DateTimeZone.Utc,
-                resolution,
-                false,
-                false,
-                DataNormalizationMode.Adjusted,
-                TickType.Quote);
+            var symbols = new List<Symbol>{ symbol };
+            if (symbol.IsCanonical())
+            {
+                symbols = GetChainSymbols(symbol, true).ToList();
+            }
 
-            var data = _brokerage.GetHistory(historyRequest);
+            var exchangeHours = MarketHoursDatabase.FromDataFolder().GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
+            var dataTimeZone = MarketHoursDatabase.FromDataFolder().GetDataTimeZone(symbol.ID.Market, symbol, symbol.SecurityType);
 
-            return data;
+            foreach (var targetSymbol in symbols)
+            {
+                var historyRequest = new HistoryRequest(startUtc,
+                    endUtc,
+                    typeof(QuoteBar),
+                    targetSymbol,
+                    resolution,
+                    exchangeHours: exchangeHours,
+                    dataTimeZone: dataTimeZone,
+                    resolution,
+                    includeExtendedMarketHours: true,
+                    false,
+                    DataNormalizationMode.Adjusted,
+                    TickType.Quote);
+
+                foreach (var baseData in _brokerage.GetHistory(historyRequest))
+                {
+                    yield return baseData;
+                }
+            }
         }
 
         /// <summary>
         /// Returns an IEnumerable of Future/Option contract symbols for the given root ticker
         /// </summary>
-        /// <param name="ticker">The root ticker</param>
-        /// <param name="securityType">Expected security type of the returned symbols (if any)</param>
+        /// <param name="symbol">The Symbol to get futures/options chain for</param>
         /// <param name="includeExpired">Include expired contracts</param>
-        public IEnumerable<Symbol> GetChainSymbols(string ticker, SecurityType securityType, bool includeExpired)
+        public IEnumerable<Symbol> GetChainSymbols(Symbol symbol, bool includeExpired)
         {
-            return _brokerage.LookupSymbols(ticker, securityType, includeExpired);
+            return _brokerage.LookupSymbols(symbol, includeExpired);
         }
 
         /// <summary>

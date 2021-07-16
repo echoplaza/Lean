@@ -43,7 +43,7 @@ namespace QuantConnect
             Tuple.Create(CBOT, 8),
             Tuple.Create(ICE, 9),
             Tuple.Create(CBOE, 10),
-            Tuple.Create(NSE, 11),
+            Tuple.Create(India, 11),
 
             Tuple.Create(GDAX, 12),
             Tuple.Create(Kraken, 13),
@@ -60,6 +60,7 @@ namespace QuantConnect
             Tuple.Create(CME, 23),
             Tuple.Create(SGX, 24),
             Tuple.Create(HKFE, 25),
+
         };
 
         static Market()
@@ -125,9 +126,10 @@ namespace QuantConnect
         public const string CBOE = "cboe";
 
         /// <summary>
-        /// NSE
+        /// NSE - National Stock Exchange
         /// </summary>
-        public const string NSE = "nse";
+        public const string India = "india";
+
         
         /// <summary>
         /// Comex

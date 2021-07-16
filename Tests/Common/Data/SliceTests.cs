@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -14,7 +14,6 @@
 */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
@@ -34,14 +33,16 @@ namespace QuantConnect.Tests.Common.Data
         [Test]
         public void AccessesByDataType()
         {
-            var tradeBar = new TradeBar { Symbol = Symbols.SPY, Time = DateTime.UtcNow };
-            var quandl = new Quandl { Symbol = Symbols.SPY, Time = DateTime.Now };
-            var quoteBar = new QuoteBar { Symbol = Symbols.SPY, Time = DateTime.Now };
-            var tick = new Tick(DateTime.Now, Symbols.SPY, 1.1m, 2.1m) {TickType = TickType.Trade};
-            var split = new Split(Symbols.SPY, DateTime.UtcNow, 1, 1, SplitType.SplitOccurred);
-            var delisting = new Delisting(Symbols.SPY, DateTime.UtcNow, 1, DelistingType.Delisted);
+            var now = DateTime.UtcNow;
+            var tradeBar = new TradeBar { Symbol = Symbols.SPY, Time = now };
+            var quandl = new Quandl { Symbol = Symbols.SPY, Time = now };
+            var quoteBar = new QuoteBar { Symbol = Symbols.SPY, Time = now };
+            var tick = new Tick(now, Symbols.SPY, 1.1m, 2.1m) {TickType = TickType.Trade};
+            var openInterest = new OpenInterest(now, Symbols.SPY, 1);
+            var split = new Split(Symbols.SPY, now, 1, 1, SplitType.SplitOccurred);
+            var delisting = new Delisting(Symbols.SPY, now, 1, DelistingType.Delisted);
 
-            var slice = new Slice(DateTime.UtcNow, new BaseData[] {quoteBar, tradeBar, quandl, tick, split, delisting });
+            var slice = new Slice(now, new BaseData[] {quoteBar, tradeBar, quandl, tick, split, delisting, openInterest });
 
             Assert.AreEqual(slice.Get(typeof(TradeBar))[Symbols.SPY], tradeBar);
             Assert.AreEqual(slice.Get(typeof(Quandl))[Symbols.SPY], quandl);
@@ -49,6 +50,7 @@ namespace QuantConnect.Tests.Common.Data
             Assert.AreEqual(slice.Get(typeof(Tick))[Symbols.SPY], tick);
             Assert.AreEqual(slice.Get(typeof(Split))[Symbols.SPY], split);
             Assert.AreEqual(slice.Get(typeof(Delisting))[Symbols.SPY], delisting);
+            Assert.AreEqual(slice.Get(typeof(OpenInterest))[Symbols.SPY], openInterest);
         }
 
         [Test]
@@ -212,10 +214,7 @@ namespace QuantConnect.Tests.Common.Data
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                 @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Custom import *
+from AlgorithmImports import *
 
 def Test(slice):
     data = slice.Get(Quandl)
@@ -238,10 +237,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Custom import *
+from AlgorithmImports import *
 
 def Test(slice):
     for dataPoint in slice:
@@ -263,11 +259,8 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 from QuantConnect.Tests import *
-from QuantConnect.Data.Custom import *
 
 def Test(slice):
     data = slice.Get(Quandl)
@@ -289,11 +282,8 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 from QuantConnect.Tests import *
-from QuantConnect.Data.Custom import *
 
 def Test(slice):
     data = slice.Get(Quandl, Symbols.AAPL)
@@ -315,10 +305,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Market import *
+from AlgorithmImports import *
 
 def Test(slice):
     data = slice.Get(TradeBar)
@@ -337,17 +324,41 @@ def Test(slice):
         }
 
         [Test]
+        public void PythonGetBySymbolOpenInterest()
+        {
+            using (Py.GIL())
+            {
+                dynamic test = PythonEngine.ModuleFromString("testModule",
+                    @"
+from AlgorithmImports import *
+from QuantConnect.Tests import *
+
+def Test(slice):
+    data = slice.Get(OpenInterest)
+    value = data[Symbols.AAPL].Value
+    if value != 33:
+        raise Exception('Unexpected value')").GetAttr("Test");
+                var now = DateTime.UtcNow;
+                var TradeBarSpy = new TradeBar { Symbol = Symbols.SPY, Time = now, Value = 8 };
+                var TradeBarAapl = new TradeBar { Symbol = Symbols.AAPL, Time = now, Value = 9 };
+                var quandlSpy = new Quandl { Symbol = Symbols.SPY, Time = now, Value = 10 };
+                var quandlAapl = new Quandl { Symbol = Symbols.AAPL, Time = now, Value = 11 };
+                var openInterest = new OpenInterest(now, Symbols.AAPL, 33);
+                var slice = new Slice(now, new BaseData[] { quandlSpy, TradeBarAapl, quandlAapl, TradeBarSpy, openInterest });
+
+                Assert.DoesNotThrow(() => test(new PythonSlice(slice)));
+            }
+        }
+
+        [Test]
         public void PythonGetBySymbolTradeBar()
         {
             using (Py.GIL())
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 from QuantConnect.Tests import *
-from QuantConnect.Data.Market import *
 
 def Test(slice):
     data = slice.Get(TradeBar)
@@ -371,11 +382,8 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 from QuantConnect.Tests import *
-from QuantConnect.Data.Market import *
 
 def Test(slice):
     data = slice.Get(TradeBar, Symbols.AAPL)
@@ -399,10 +407,8 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Custom.Tiingo import TiingoNews
+from AlgorithmImports import *
+from QuantConnect.Data.Custom.Tiingo import *
 from QuantConnect.Logging import *
 
 def Test(slice):
@@ -429,10 +435,8 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Custom.Tiingo import TiingoNews
+from AlgorithmImports import *
+from QuantConnect.Data.Custom.Tiingo import *
 
 def Test(slice):
     data = slice.Get(TiingoNews)
@@ -459,10 +463,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Custom import *
+from AlgorithmImports import *
 
 def Test(slice):
     data = slice.Get(Quandl)
@@ -537,9 +538,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice):
     slice.clear()").GetAttr("Test");
@@ -555,9 +554,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice):
     slice.popitem()").GetAttr("Test");
@@ -573,9 +570,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     slice.pop(symbol)").GetAttr("Test");
@@ -591,9 +586,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol, default_value):
     slice.pop(symbol, default_value)").GetAttr("Test");
@@ -609,9 +602,7 @@ def Test(slice, symbol, default_value):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     item = { symbol: 1 }
@@ -628,10 +619,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
-from QuantConnect.Data.Market import TradeBar
+from AlgorithmImports import *
 
 def Test(slice, symbol, bar):
     item = { symbol: bar }
@@ -651,13 +639,9 @@ def Test(slice, symbol, bar):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
+from AlgorithmImports import *
 AddReference(""QuantConnect.Tests"")
-AddReference(""QuantConnect.Common"")
-AddReference(""System"")
-from QuantConnect import *
-from QuantConnect.Data.Market import Tick
-from QuantConnect.Tests.Common.Data import PublicArrayTest
+from QuantConnect.Tests.Common.Data import *
 
 def Test(slice, symbol):
     return symbol in slice").GetAttr("Test");
@@ -679,14 +663,9 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from datetime import datetime
-from clr import AddReference
+from AlgorithmImports import *
 AddReference(""QuantConnect.Tests"")
-AddReference(""QuantConnect.Common"")
-AddReference(""System"")
-from QuantConnect import *
-from QuantConnect.Data.Market import Tick
-from QuantConnect.Tests.Common.Data import PublicArrayTest
+from QuantConnect.Tests.Common.Data import *
 
 def Test(slice, symbol):
     msg = '__contains__'
@@ -813,13 +792,9 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
+from AlgorithmImports import *
 AddReference(""QuantConnect.Tests"")
-AddReference(""QuantConnect.Common"")
-AddReference(""System"")
-from QuantConnect import *
-from QuantConnect.Data.Market import Tick
-from QuantConnect.Tests.Common.Data import PublicArrayTest
+from QuantConnect.Tests.Common.Data import *
 
 def Test(slice, symbol):
     return len(slice)").GetAttr("Test");
@@ -841,9 +816,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     copy = slice.copy()
@@ -862,9 +835,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice):
     return ', '.join([f'{k}: {v.Value}' for k,v in slice.items()])").GetAttr("Test");
@@ -883,9 +854,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice):
     return slice.keys()").GetAttr("Test");
@@ -907,9 +876,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice):
     return slice.values()").GetAttr("Test");
@@ -931,9 +898,7 @@ def Test(slice):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, keys):
     newDict = slice.fromkeys(keys)
@@ -952,9 +917,7 @@ def Test(slice, keys):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, keys, default_value):
     newDict = slice.fromkeys(keys, default_value)
@@ -962,7 +925,7 @@ def Test(slice, keys, default_value):
 
                 var result = string.Empty;
                 Assert.DoesNotThrow(() => result = test(GetPythonSlice(), new[] { Symbols.EURUSD }, new Tick()));
-                Assert.AreEqual("EURUSD 5O: 0.0", result);
+                Assert.AreEqual("EURUSD 8G: 0.0", result);
             }
         }
 
@@ -973,9 +936,7 @@ def Test(slice, keys, default_value):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     return slice.get(symbol)").GetAttr("Test");
@@ -998,9 +959,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol, default_value):
     return slice.get(symbol, default_value)").GetAttr("Test");
@@ -1023,9 +982,7 @@ def Test(slice, symbol, default_value):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     return slice.get(symbol)").GetAttr("Test");
@@ -1041,9 +998,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     return slice.setdefault(symbol)").GetAttr("Test");
@@ -1066,9 +1021,7 @@ def Test(slice, symbol):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol, default_value):
     return slice.setdefault(symbol, default_value)").GetAttr("Test");
@@ -1094,9 +1047,7 @@ def Test(slice, symbol, default_value):
             {
                 dynamic test = PythonEngine.ModuleFromString("testModule",
                     @"
-from clr import AddReference
-AddReference(""QuantConnect.Common"")
-from QuantConnect import *
+from AlgorithmImports import *
 
 def Test(slice, symbol):
     return slice.setdefault(symbol)").GetAttr("Test");

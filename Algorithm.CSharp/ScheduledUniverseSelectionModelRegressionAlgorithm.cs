@@ -67,16 +67,16 @@ namespace QuantConnect.Algorithm.CSharp
 
             if (dateTime.DayOfWeek == DayOfWeek.Tuesday || dateTime.DayOfWeek == DayOfWeek.Thursday)
             {
-                yield return QuantConnect.Symbol.Create("EURUSD", SecurityType.Forex, Market.FXCM);
+                yield return QuantConnect.Symbol.Create("EURUSD", SecurityType.Forex, Market.Oanda);
             }
             else if (dateTime.DayOfWeek == DayOfWeek.Friday)
             {
                 // given the date/time rules specified in Initialize, this symbol will never be selected (every 6 hours never lands on hour==1)
-                yield return QuantConnect.Symbol.Create("EURGBP", SecurityType.Forex, Market.FXCM);
+                yield return QuantConnect.Symbol.Create("EURGBP", SecurityType.Forex, Market.Oanda);
             }
             else
             {
-                yield return QuantConnect.Symbol.Create("NZDUSD", SecurityType.Forex, Market.FXCM);
+                yield return QuantConnect.Symbol.Create("NZDUSD", SecurityType.Forex, Market.Oanda);
             }
         }
 
@@ -192,46 +192,48 @@ namespace QuantConnect.Algorithm.CSharp
         /// </summary>
         public Dictionary<string, string> ExpectedStatistics => new Dictionary<string, string>
         {
-            {"Total Trades", "52"},
-            {"Average Win", "0.27%"},
-            {"Average Loss", "-0.22%"},
-            {"Compounding Annual Return", "41.076%"},
-            {"Drawdown", "1.000%"},
-            {"Expectancy", "0.618"},
-            {"Net Profit", "3.112%"},
-            {"Sharpe Ratio", "5.311"},
-            {"Probabilistic Sharpe Ratio", "90.919%"},
-            {"Loss Rate", "29%"},
-            {"Win Rate", "71%"},
-            {"Profit-Loss Ratio", "1.26"},
-            {"Alpha", "0.31"},
-            {"Beta", "0.054"},
-            {"Annual Standard Deviation", "0.06"},
-            {"Annual Variance", "0.004"},
-            {"Information Ratio", "1.79"},
-            {"Tracking Error", "0.079"},
-            {"Treynor Ratio", "5.952"},
-            {"Total Fees", "$36.83"},
-            {"Fitness Score", "0.67"},
-            {"Kelly Criterion Estimate", "25.099"},
-            {"Kelly Criterion Probability Value", "0.068"},
-            {"Sortino Ratio", "13.102"},
-            {"Return Over Maximum Drawdown", "55.759"},
-            {"Portfolio Turnover", "0.675"},
-            {"Total Insights Generated", "54"},
-            {"Total Insights Closed", "52"},
-            {"Total Insights Analysis Completed", "52"},
-            {"Long Insight Count", "54"},
+            {"Total Trades", "91"},
+            {"Average Win", "0.16%"},
+            {"Average Loss", "-0.09%"},
+            {"Compounding Annual Return", "50.175%"},
+            {"Drawdown", "1.100%"},
+            {"Expectancy", "0.872"},
+            {"Net Profit", "3.687%"},
+            {"Sharpe Ratio", "7.033"},
+            {"Probabilistic Sharpe Ratio", "99.081%"},
+            {"Loss Rate", "34%"},
+            {"Win Rate", "66%"},
+            {"Profit-Loss Ratio", "1.84"},
+            {"Alpha", "0.355"},
+            {"Beta", "0.183"},
+            {"Annual Standard Deviation", "0.055"},
+            {"Annual Variance", "0.003"},
+            {"Information Ratio", "2.939"},
+            {"Tracking Error", "0.071"},
+            {"Treynor Ratio", "2.121"},
+            {"Total Fees", "$40.36"},
+            {"Estimated Strategy Capacity", "$3200000.00"},
+            {"Lowest Capacity Asset", "IBM R735QTJ8XC9X"},
+            {"Fitness Score", "0.751"},
+            {"Kelly Criterion Estimate", "24.01"},
+            {"Kelly Criterion Probability Value", "0.075"},
+            {"Sortino Ratio", "43.174"},
+            {"Return Over Maximum Drawdown", "123.992"},
+            {"Portfolio Turnover", "0.751"},
+            {"Total Insights Generated", "55"},
+            {"Total Insights Closed", "53"},
+            {"Total Insights Analysis Completed", "53"},
+            {"Long Insight Count", "55"},
             {"Short Insight Count", "0"},
             {"Long/Short Ratio", "100%"},
-            {"Estimated Monthly Alpha Value", "$814596.0814"},
-            {"Total Accumulated Estimated Alpha Value", "$888136.0054"},
-            {"Mean Population Estimated Insight Value", "$17079.5386"},
-            {"Mean Population Direction", "59.6154%"},
+            {"Estimated Monthly Alpha Value", "$942079.8347"},
+            {"Total Accumulated Estimated Alpha Value", "$1027128.7087"},
+            {"Mean Population Estimated Insight Value", "$19379.7870"},
+            {"Mean Population Direction", "58.4906%"},
             {"Mean Population Magnitude", "0%"},
-            {"Rolling Averaged Population Direction", "64.1791%"},
+            {"Rolling Averaged Population Direction", "55.0223%"},
             {"Rolling Averaged Population Magnitude", "0%"},
-            {"OrderListHash", "-1450725184"}
+            {"OrderListHash", "adca1908e66d51f1f2007cbe44b3ab25"}
         };
     }
 }

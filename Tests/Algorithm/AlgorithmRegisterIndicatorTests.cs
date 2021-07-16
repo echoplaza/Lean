@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -182,18 +182,9 @@ class BadCustomIndicator:
         public void RegistersIndicatorProperlyPythonScript()
         {
             const string code = @"
-from clr import AddReference
-AddReference('System')
-AddReference('QuantConnect.Algorithm')
-AddReference('QuantConnect.Indicators')
-AddReference('QuantConnect.Common')
-AddReference('QuantConnect.Lean.Engine')
+from AlgorithmImports import *
 
-from System import *
-from QuantConnect import *
-from QuantConnect.Securities import *
-from QuantConnect.Algorithm import *
-from QuantConnect.Indicators import *
+AddReference('QuantConnect.Lean.Engine')
 from QuantConnect.Lean.Engine.DataFeeds import *
 
 algo = QCAlgorithm()
@@ -203,7 +194,7 @@ symbolPropertiesDatabase = SymbolPropertiesDatabase.FromDataFolder()
 securityService =  SecurityService(algo.Portfolio.CashBook, marketHoursDatabase, symbolPropertiesDatabase, algo, RegisteredSecurityDataTypesProvider.Null, SecurityCacheProvider(algo.Portfolio))
 algo.Securities.SetSecurityService(securityService)
 dataPermissionManager = DataPermissionManager()
-dataManager = DataManager(None, UniverseSelection(algo, securityService, dataPermissionManager), algo, algo.TimeKeeper, marketHoursDatabase, False, RegisteredSecurityDataTypesProvider.Null, dataPermissionManager)
+dataManager = DataManager(None, UniverseSelection(algo, securityService, dataPermissionManager, None), algo, algo.TimeKeeper, marketHoursDatabase, False, RegisteredSecurityDataTypesProvider.Null, dataPermissionManager)
 algo.SubscriptionManager.SetDataManager(dataManager)
 
 

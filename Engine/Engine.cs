@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using QuantConnect.Brokerages;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
+using QuantConnect.Data.Auxiliary;
 using QuantConnect.Exceptions;
 using QuantConnect.Interfaces;
 using QuantConnect.Lean.Engine.DataFeeds;
@@ -46,6 +47,7 @@ namespace QuantConnect.Lean.Engine
     public class Engine
     {
         private bool _historyStartDateLimitedWarningEmitted;
+        private bool _historyNumericalPrecisionLimitedWarningEmitted;
         private readonly bool _liveMode;
         private readonly Lazy<StackExceptionInterpreter> _exceptionInterpreter;
 
@@ -91,6 +93,7 @@ namespace QuantConnect.Lean.Engine
 
             try
             {
+                TextSubscriptionDataSourceReader.SetCacheSize((int) (job.RamAllocation * 0.4));
 
                 //Reset thread holders.
                 var initializeComplete = false;
@@ -131,19 +134,24 @@ namespace QuantConnect.Lean.Engine
                     // notify the user of any errors w/ object store persistence
                     AlgorithmHandlers.ObjectStore.ErrorRaised += (sender, args) => algorithm.Debug($"ObjectStore Persistence Error: {args.Error.Message}");
 
+
                     // Initialize the brokerage
                     IBrokerageFactory factory;
                     brokerage = AlgorithmHandlers.Setup.CreateBrokerage(job, algorithm, out factory);
 
-                    var symbolPropertiesDatabase = SymbolPropertiesDatabase.FromDataFolder();
+                    // forward brokerage message events to the result handler
+                    brokerage.Message += (_, e) => AlgorithmHandlers.Results.BrokerageMessage(e);
 
+                    var symbolPropertiesDatabase = SymbolPropertiesDatabase.FromDataFolder();
+                    var mapFilePrimaryExchangeProvider = new MapFilePrimaryExchangeProvider(AlgorithmHandlers.MapFileProvider);
                     var registeredTypesProvider = new RegisteredSecurityDataTypesProvider();
                     var securityService = new SecurityService(algorithm.Portfolio.CashBook,
                         marketHoursDatabase,
                         symbolPropertiesDatabase,
                         algorithm,
                         registeredTypesProvider,
-                        new SecurityCacheProvider(algorithm.Portfolio));
+                        new SecurityCacheProvider(algorithm.Portfolio),
+                        mapFilePrimaryExchangeProvider);
 
                     algorithm.Securities.SetSecurityService(securityService);
 
@@ -151,7 +159,8 @@ namespace QuantConnect.Lean.Engine
                         new UniverseSelection(
                             algorithm,
                             securityService,
-                            AlgorithmHandlers.DataPermissionsManager),
+                            AlgorithmHandlers.DataPermissionsManager,
+                            AlgorithmHandlers.DataProvider),
                         algorithm,
                         algorithm.TimeKeeper,
                         marketHoursDatabase,
@@ -159,7 +168,6 @@ namespace QuantConnect.Lean.Engine
                         registeredTypesProvider,
                         AlgorithmHandlers.DataPermissionsManager);
 
-                    AlgorithmHandlers.Results.SetDataManager(dataManager);
                     algorithm.SubscriptionManager.SetDataManager(dataManager);
 
                     synchronizer.Initialize(algorithm, dataManager);
@@ -211,7 +219,6 @@ namespace QuantConnect.Lean.Engine
                     );
 
                     historyProvider.InvalidConfigurationDetected += (sender, args) => { AlgorithmHandlers.Results.ErrorMessage(args.Message); };
-                    historyProvider.NumericalPrecisionLimited += (sender, args) => { AlgorithmHandlers.Results.DebugMessage(args.Message); };
                     historyProvider.DownloadFailed += (sender, args) => { AlgorithmHandlers.Results.ErrorMessage(args.Message, args.StackTrace); };
                     historyProvider.ReaderErrorDetected += (sender, args) => { AlgorithmHandlers.Results.RuntimeError(args.Message, args.StackTrace); };
 
@@ -221,7 +228,8 @@ namespace QuantConnect.Lean.Engine
                     algorithm.BrokerageMessageHandler = factory.CreateBrokerageMessageHandler(algorithm, job, SystemHandlers.Api);
 
                     //Initialize the internal state of algorithm and job: executes the algorithm.Initialize() method.
-                    initializeComplete = AlgorithmHandlers.Setup.Setup(new SetupHandlerParameters(dataManager.UniverseSelection, algorithm, brokerage, job, AlgorithmHandlers.Results, AlgorithmHandlers.Transactions, AlgorithmHandlers.RealTime, AlgorithmHandlers.ObjectStore));
+                    initializeComplete = AlgorithmHandlers.Setup.Setup(new SetupHandlerParameters(dataManager.UniverseSelection, algorithm, brokerage, job, AlgorithmHandlers.Results,
+                        AlgorithmHandlers.Transactions, AlgorithmHandlers.RealTime, AlgorithmHandlers.ObjectStore, AlgorithmHandlers.DataProvider));
 
                     // set this again now that we've actually added securities
                     AlgorithmHandlers.Results.SetAlgorithm(algorithm, AlgorithmHandlers.Setup.StartingPortfolioValue);
@@ -253,8 +261,12 @@ namespace QuantConnect.Lean.Engine
                 catch (Exception err)
                 {
                     Log.Error(err);
-                    var runtimeMessage = "Algorithm.Initialize() Error: " + err.Message + " Stack Trace: " + err;
-                    AlgorithmHandlers.Results.RuntimeError(runtimeMessage, err.ToString());
+
+                    // for python we don't add the ugly pythonNet stack trace
+                    var stackTrace = job.Language == Language.Python ? err.Message : err.ToString();
+
+                    var runtimeMessage = "Algorithm.Initialize() Error: " + err.Message + " Stack Trace: " + stackTrace;
+                    AlgorithmHandlers.Results.RuntimeError(runtimeMessage, stackTrace);
                     SystemHandlers.Api.SetAlgorithmStatus(job.AlgorithmId, AlgorithmStatus.RuntimeError, runtimeMessage);
                 }
 
@@ -396,6 +408,8 @@ namespace QuantConnect.Lean.Engine
                     dataManager?.RemoveAllSubscriptions();
                     workerThread?.Dispose();
                 }
+
+                synchronizer.DisposeSafely();
                 // Close data feed, alphas. Could be running even if algorithm initialization failed
                 AlgorithmHandlers.DataFeed.Exit();
                 AlgorithmHandlers.Alphas.Exit();
@@ -470,8 +484,12 @@ namespace QuantConnect.Lean.Engine
                 var message = "Runtime Error: " + _exceptionInterpreter.Value.GetExceptionMessageHeader(err);
                 Log.Trace("Engine.Run(): Sending runtime error to user...");
                 AlgorithmHandlers.Results.LogMessage(message);
-                AlgorithmHandlers.Results.RuntimeError(message, err.ToString());
-                SystemHandlers.Api.SetAlgorithmStatus(job.AlgorithmId, AlgorithmStatus.RuntimeError, message + " Stack Trace: " + err);
+
+                // for python we don't add the ugly pythonNet stack trace
+                var stackTrace = job.Language == Language.Python ? err.Message : err.ToString();
+
+                AlgorithmHandlers.Results.RuntimeError(message, stackTrace);
+                SystemHandlers.Api.SetAlgorithmStatus(job.AlgorithmId, AlgorithmStatus.RuntimeError, $"{message} Stack Trace: {stackTrace}");
             }
         }
 
@@ -487,7 +505,14 @@ namespace QuantConnect.Lean.Engine
             var provider = Composer.Instance.GetExportedValueByTypeName<IHistoryProvider>(historyProvider);
 
             provider.InvalidConfigurationDetected += (sender, args) => { AlgorithmHandlers.Results.ErrorMessage(args.Message); };
-            provider.NumericalPrecisionLimited += (sender, args) => { AlgorithmHandlers.Results.DebugMessage(args.Message); };
+            provider.NumericalPrecisionLimited += (sender, args) =>
+            {
+                if (!_historyNumericalPrecisionLimitedWarningEmitted)
+                {
+                    _historyNumericalPrecisionLimitedWarningEmitted = true;
+                    AlgorithmHandlers.Results.DebugMessage("Warning: when performing history requests, the start date will be adjusted if there are numerical precision errors in the factor files.");
+                }
+            };
             provider.StartDateLimited += (sender, args) =>
             {
                 if (!_historyStartDateLimitedWarningEmitted)

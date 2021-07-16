@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -29,19 +29,21 @@ namespace QuantConnect.Lean.Engine.DataFeeds.WorkScheduling
     /// <see cref="WorkItem"/> and not share it with another thread.
     /// This is required because the data enumerator stack yields, which state
     /// depends on the thread id</remarks>
-    public class WeightedWorkScheduler
+    public class WeightedWorkScheduler : WorkScheduler
     {
+        private static readonly Lazy<WeightedWorkScheduler> _instance = new Lazy<WeightedWorkScheduler>(() => new WeightedWorkScheduler());
+
         /// <summary>
         /// This is the size of each work sprint
         /// </summary>
-        internal const int WorkBatchSize = 50;
+        public const int WorkBatchSize = 50;
 
         /// <summary>
         /// This is the maximum size a work item can weigh,
         /// if reached, it will be ignored and not executed until its less
         /// </summary>
         /// <remarks>This is useful to limit RAM and CPU usage</remarks>
-        internal static int MaxWorkWeight;
+        public static int MaxWorkWeight;
 
         private readonly ConcurrentQueue<WorkItem> _newWork;
         private readonly AutoResetEvent _newWorkEvent;
@@ -49,28 +51,27 @@ namespace QuantConnect.Lean.Engine.DataFeeds.WorkScheduling
         /// <summary>
         /// Singleton instance
         /// </summary>
-        public static WeightedWorkScheduler Instance = new WeightedWorkScheduler();
+        public static WeightedWorkScheduler Instance => _instance.Value;
 
         private WeightedWorkScheduler()
         {
             _newWork = new ConcurrentQueue<WorkItem>();
             _newWorkEvent = new AutoResetEvent(false);
 
-            var work = new List<WorkQueue>();
+            var work = new List<WeightedWorkQueue>();
             var queueManager = new Thread(() =>
             {
-                var workersCount = Configuration.Config.GetInt("data-feed-workers-count", Environment.ProcessorCount);
                 MaxWorkWeight = Configuration.Config.GetInt("data-feed-max-work-weight", 400);
-                Logging.Log.Trace($"WeightedWorkScheduler(): will use {workersCount} workers and MaxWorkWeight is {MaxWorkWeight}");
+                Logging.Log.Trace($"WeightedWorkScheduler(): will use {WorkersCount} workers and MaxWorkWeight is {MaxWorkWeight}");
 
-                for (var i = 0; i < workersCount; i++)
+                for (var i = 0; i < WorkersCount; i++)
                 {
-                    var workQueue = new WorkQueue();
+                    var workQueue = new WeightedWorkQueue();
                     work.Add(workQueue);
-                    var thread = new Thread(() => WorkerThread(workQueue, _newWork, _newWorkEvent))
+                    var thread = new Thread(() => workQueue.WorkerThread(_newWork, _newWorkEvent))
                     {
                         IsBackground = true,
-                        Priority = ThreadPriority.Lowest,
+                        Priority = workQueue.ThreadPriority,
                         Name = $"WeightedWorkThread{i}"
                     };
                     thread.Start();
@@ -80,9 +81,9 @@ namespace QuantConnect.Lean.Engine.DataFeeds.WorkScheduling
                 while (true)
                 {
                     Thread.Sleep(TimeSpan.FromMilliseconds(1));
-                    foreach (var queue in work)
+                    for (var i = 0; i < work.Count; i++)
                     {
-                        queue.Sort();
+                        work[i].Sort();
                     }
                 }
             })
@@ -96,53 +97,14 @@ namespace QuantConnect.Lean.Engine.DataFeeds.WorkScheduling
         /// <summary>
         /// Add a new work item to the queue
         /// </summary>
+        /// <param name="symbol">The symbol associated with this work</param>
         /// <param name="workFunc">The work function to run</param>
         /// <param name="weightFunc">The weight function.
         /// Work will be sorted in ascending order based on this weight</param>
-        public void QueueWork(Func<int, bool> workFunc, Func<int> weightFunc)
+        public override void QueueWork(Symbol symbol, Func<int, bool> workFunc, Func<int> weightFunc)
         {
             _newWork.Enqueue(new WorkItem(workFunc, weightFunc));
             _newWorkEvent.Set();
-        }
-
-        /// <summary>
-        /// This is the worker thread loop.
-        /// It will first try to take a work item from the new work queue else will check his own queue.
-        /// </summary>
-        private static void WorkerThread(WorkQueue workQueue, ConcurrentQueue<WorkItem> newWork, AutoResetEvent newWorkEvent)
-        {
-            var waitHandles = new WaitHandle[] {workQueue.WorkAvailableEvent, newWorkEvent};
-            while (true)
-            {
-                WorkItem workItem;
-                if (!newWork.TryDequeue(out workItem))
-                {
-                    workItem = workQueue.Get();
-                    if (workItem == null)
-                    {
-                        // no work to do, lets sleep and try again
-                        WaitHandle.WaitAny(waitHandles, 100);
-                        continue;
-                    }
-                }
-                else
-                {
-                    workQueue.Add(workItem);
-                }
-
-                try
-                {
-                    if (!workItem.Work(WorkBatchSize))
-                    {
-                        workQueue.Remove(workItem);
-                    }
-                }
-                catch (Exception exception)
-                {
-                    workQueue.Remove(workItem);
-                    Logging.Log.Error(exception);
-                }
-            }
         }
     }
 }

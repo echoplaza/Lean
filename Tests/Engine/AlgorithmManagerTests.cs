@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using NUnit.Framework;
+using QuantConnect.Brokerages;
 using QuantConnect.Brokerages.Backtesting;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -63,7 +64,8 @@ namespace QuantConnect.Tests.Engine
                         algorithm,
                         RegisteredSecurityDataTypesProvider.Null,
                         new SecurityCacheProvider(algorithm.Portfolio)),
-                    dataPermissionManager),
+                    dataPermissionManager,
+                    new DefaultDataProvider()),
                 algorithm,
                 algorithm.TimeKeeper,
                 marketHoursDatabase,
@@ -159,6 +161,10 @@ namespace QuantConnect.Tests.Engine
             public ConcurrentQueue<Packet> Messages { get; set; }
             public bool IsActive { get; }
 
+            public void OnSecuritiesChanged(SecurityChanges changes)
+            {
+            }
+
             public void Initialize(AlgorithmNodePacket job,
                 IMessagingHandler messagingHandler,
                 IApi api,
@@ -187,6 +193,10 @@ namespace QuantConnect.Tests.Engine
             }
 
             public void RuntimeError(string message, string stacktrace = "")
+            {
+            }
+
+            public void BrokerageMessage(BrokerageMessageEvent brokerageMessageEvent)
             {
             }
 

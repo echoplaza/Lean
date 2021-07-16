@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -84,6 +84,9 @@ def mapper(key):
     if keyType is Symbol:
         return str(key.ID)
     if keyType is str:
+        reserved = ['high', 'low', 'open', 'close']
+        if key in reserved:
+            return key
         kvp = SymbolCache.TryGetSymbol(key, None)
         if kvp[0]:
             return str(kvp[1].ID)
@@ -324,7 +327,7 @@ setattr(modules[__name__], 'concat', wrap_function(pd.concat))");
             _symbol = ((IBaseData)data).Symbol;
 
             if (_symbol.SecurityType == SecurityType.Future) Levels = 3;
-            if (_symbol.SecurityType == SecurityType.Option) Levels = 5;
+            if (_symbol.SecurityType.IsOption()) Levels = 5;
 
             var columns = new HashSet<string>
             {
@@ -404,7 +407,7 @@ setattr(modules[__name__], 'concat', wrap_function(pd.concat))");
                 var value = ((IBaseData) baseData).Value;
                 AddToSeries("value", endTime, value);
 
-                foreach (var kvp in storage)
+                foreach (var kvp in storage.Where(x => x.Key != "value"))
                 {
                     AddToSeries(kvp.Key, endTime, kvp.Value);
                 }
@@ -504,7 +507,7 @@ setattr(modules[__name__], 'concat', wrap_function(pd.concat))");
                 list[0] = _symbol.ID.Date.ToPython();
                 list[3] = _symbol.ID.ToString().ToPython();
             }
-            if (_symbol.SecurityType == SecurityType.Option)
+            if (_symbol.SecurityType.IsOption())
             {
                 list[0] = _symbol.ID.Date.ToPython();
                 list[1] = _symbol.ID.StrikePrice.ToPython();

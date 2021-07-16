@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -20,6 +20,7 @@ using Newtonsoft.Json;
 using NodaTime;
 using NUnit.Framework;
 using QuantConnect.Algorithm;
+using QuantConnect.Algorithm.Selection;
 using QuantConnect.AlgorithmFactory.Python.Wrappers;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
@@ -29,6 +30,7 @@ using QuantConnect.Data.Custom;
 using QuantConnect.Data.Custom.Tiingo;
 using QuantConnect.Data.Custom.TradingEconomics;
 using QuantConnect.Data.Market;
+using QuantConnect.Data.UniverseSelection;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Securities;
 using QuantConnect.Tests.Engine.DataFeeds;
@@ -44,16 +46,16 @@ namespace QuantConnect.Tests.Algorithm
         [Test]
         public void DefaultDataFeeds_CanBeOverwritten_Successfully()
         {
-            Config.Set("security-data-feeds", "{ Forex: [\"Trade\"] }");
             var algo = new QCAlgorithm();
             algo.SubscriptionManager.SetDataManager(new DataManagerStub(algo));
 
-            // forex defult - should be tradebar
+            // forex defult - should be quotebar
             var forexTrade = algo.AddForex("EURUSD");
             Assert.IsTrue(forexTrade.Subscriptions.Count() == 1);
             Assert.IsTrue(GetMatchingSubscription(forexTrade, typeof(QuoteBar)) != null);
 
             // Change
+            Config.Set("security-data-feeds", "{ Forex: [\"Trade\"] }");
             var dataFeedsConfigString = Config.Get("security-data-feeds");
             Dictionary<SecurityType, List<TickType>> dataFeeds = new Dictionary<SecurityType, List<TickType>>();
             if (dataFeedsConfigString != string.Empty)
@@ -63,10 +65,13 @@ namespace QuantConnect.Tests.Algorithm
 
             algo.SetAvailableDataTypes(dataFeeds);
 
-            // new forex - should be quotebar
+            // new forex - should be tradebar
             var forexQuote = algo.AddForex("EURUSD");
             Assert.IsTrue(forexQuote.Subscriptions.Count() == 1);
             Assert.IsTrue(GetMatchingSubscription(forexQuote, typeof(TradeBar)) != null);
+
+            // reset to empty string, affects other tests because config is static
+            Config.Set("security-data-feeds", "");
         }
 
         [Test]
@@ -218,7 +223,7 @@ namespace QuantConnect.Tests.Algorithm
                     asset = qcAlgorithm.AddForex(ticker, Resolution.Daily);
                     break;
                 case SecurityType.Future:
-                    asset = qcAlgorithm.AddFuture(ticker, Resolution.Daily);
+                    asset = qcAlgorithm.AddFuture(ticker, Resolution.Minute);
                     break;
                 default:
                     throw new Exception($"SecurityType {securityType} is not valid for this test");
@@ -279,7 +284,7 @@ namespace QuantConnect.Tests.Algorithm
                     asset = qcAlgorithm.AddForex(ticker, Resolution.Daily);
                     break;
                 case SecurityType.Future:
-                    asset = qcAlgorithm.AddFuture(ticker, Resolution.Daily);
+                    asset = qcAlgorithm.AddFuture(ticker, Resolution.Minute);
                     break;
                 default:
                     throw new Exception($"SecurityType {securityType} is not valid for this test");
@@ -350,7 +355,7 @@ namespace QuantConnect.Tests.Algorithm
                     asset = qcAlgorithm.AddForex(ticker, Resolution.Daily);
                     break;
                 case SecurityType.Future:
-                    asset = qcAlgorithm.AddFuture(ticker, Resolution.Daily);
+                    asset = qcAlgorithm.AddFuture(ticker, Resolution.Minute);
                     break;
                 default:
                     throw new Exception($"SecurityType {securityType} is not valid for this test");
@@ -391,6 +396,61 @@ namespace QuantConnect.Tests.Algorithm
                     Assert.AreEqual(asset.Symbol.Value, customData.Symbol.Value.Split('.').First());
                 }
             }
+        }
+
+        [Test]
+        public void AddOptionWithUnderlyingFuture()
+        {
+            // Adds an option containing a Future as its underlying Symbol.
+            // This is an essential step in enabling custom derivatives
+            // based on any asset class provided to Option. This test
+            // checks the ability to create Future Options.
+            var algo = new QCAlgorithm();
+            algo.SubscriptionManager.SetDataManager(new DataManagerStub(algo));
+
+            var underlying = algo.AddFuture("ES", Resolution.Minute, Market.CME);
+            underlying.SetFilter(0, 365);
+
+            var futureOption = algo.AddOption(underlying.Symbol, Resolution.Minute);
+
+            Assert.IsTrue(futureOption.Symbol.HasUnderlying);
+            Assert.AreEqual(underlying.Symbol, futureOption.Symbol.Underlying);
+        }
+
+        [Test]
+        public void AddFutureOptionContractNonEquityOption()
+        {
+            // Adds an option contract containing an underlying future contract.
+            // We test to make sure that the security returned is a specific option
+            // contract and with the future as the underlying.
+            var algo = new QCAlgorithm();
+            algo.SubscriptionManager.SetDataManager(new DataManagerStub(algo));
+
+            var underlying = algo.AddFutureContract(
+                Symbol.CreateFuture("ES", Market.CME, new DateTime(2021, 3, 19)),
+                Resolution.Minute);
+
+            var futureOptionContract = algo.AddFutureOptionContract(
+                Symbol.CreateOption(underlying.Symbol, Market.CME, OptionStyle.American, OptionRight.Call, 2550m, new DateTime(2021, 3, 19)),
+                Resolution.Minute);
+
+            Assert.AreEqual(underlying.Symbol, futureOptionContract.Symbol.Underlying);
+            Assert.AreEqual(underlying, futureOptionContract.Underlying);
+            Assert.IsFalse(underlying.Symbol.IsCanonical());
+            Assert.IsFalse(futureOptionContract.Symbol.IsCanonical());
+        }
+
+        [Test]
+        public void AddFutureOptionAddsUniverseSelectionModel()
+        {
+            var algo = new QCAlgorithm();
+            algo.SubscriptionManager.SetDataManager(new DataManagerStub(algo));
+
+            var underlying = algo.AddFuture("ES", Resolution.Minute, Market.CME);
+            underlying.SetFilter(0, 365);
+
+            algo.AddFutureOption(underlying.Symbol, _ => _);
+            Assert.IsTrue(algo.UniverseSelection is OptionChainedUniverseSelectionModel);
         }
 
         [TestCase("AAPL", typeof(TiingoNews), true)]

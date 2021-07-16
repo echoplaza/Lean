@@ -18,8 +18,9 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using QuantConnect.Brokerages;
+using QuantConnect.Data.UniverseSelection;
 using QuantConnect.Interfaces;
-using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.TransactionHandlers;
 using QuantConnect.Orders;
 using QuantConnect.Packets;
@@ -50,6 +51,11 @@ namespace QuantConnect.Lean.Engine.Results
         {
             get;
         }
+
+        /// <summary>
+        /// Event fired each time that we add/remove securities from the data feed
+        /// </summary>
+        void OnSecuritiesChanged(SecurityChanges changes);
 
         /// <summary>
         /// Initialize the result handler with this result packet.
@@ -97,6 +103,12 @@ namespace QuantConnect.Lean.Engine.Results
         /// <param name="message">Error message.</param>
         /// <param name="stacktrace">Stacktrace information string</param>
         void RuntimeError(string message, string stacktrace = "");
+
+        /// <summary>
+        /// Process brokerage message events
+        /// </summary>
+        /// <param name="brokerageMessageEvent">The brokerage message event</param>
+        void BrokerageMessage(BrokerageMessageEvent brokerageMessageEvent);
 
         /// <summary>
         /// Method to attempt to update the <see cref="IResultHandler"/> with various performance metrics.
@@ -154,10 +166,5 @@ namespace QuantConnect.Lean.Engine.Results
         /// <param name="name">The name of the results</param>
         /// <param name="result">The results to save</param>
         void SaveResults(string name, Result result);
-
-        /// <summary>
-        /// Sets the current Data Manager instance
-        /// </summary>
-        void SetDataManager(IDataFeedSubscriptionManager dataManager);
     }
 }
